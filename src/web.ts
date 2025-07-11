@@ -1,6 +1,6 @@
 import { WebPlugin } from '@capacitor/core';
 
-import type { NFCPlugin, NDEFWriteOptions, NDEFMessages, NFCError } from './definitions';
+import type { NDEFMessages, NDEFWriteOptions, NFCError, NFCPlugin, NFCUIDData } from './definitions';
 
 export class NFCWeb extends WebPlugin implements NFCPlugin {
   private nfcReader?: any; // NDEFReader type
@@ -16,13 +16,27 @@ export class NFCWeb extends WebPlugin implements NFCPlugin {
     this.nfcReader.onreading = (event: any) => {
       // Convert Web NFC message to plugin format
       const messages: NDEFMessages = {
-        messages: [this.convertNDEFMessage(event.message)]
+        messages: [this.convertNDEFMessage(event.message)],
       };
       this.notifyListeners('nfcTag', messages);
     };
     this.nfcReader.onerror = (event: any) => {
       this.notifyListeners('nfcError', { error: event.error?.message || 'NFC error' });
     };
+  }
+
+  async startUIDScan(): Promise<void> {
+    // Web NFC API tidak mendukung pembacaan UID langsung
+    // Fallback ke NDEF scanning
+    throw this.createError('UID scanning tidak didukung di web browser. Gunakan NDEF scanning sebagai alternatif.');
+  }
+
+  async stopScan(): Promise<void> {
+    this.scanActive = false;
+    if (this.nfcReader) {
+      // Web NFC API tidak memiliki method stop, tapi kita set flag
+      this.nfcReader = undefined;
+    }
   }
 
   async writeNDEF(options: NDEFWriteOptions): Promise<void> {
@@ -37,18 +51,10 @@ export class NFCWeb extends WebPlugin implements NFCPlugin {
   }
 
   // NFCPlugin interface expects these signatures
-  addListener(
-    eventName: 'nfcTag',
-    listenerFunc: (data: NDEFMessages) => void
-  ): Promise<any> & any;
-  addListener(
-    eventName: 'nfcWriteSuccess',
-    listenerFunc: () => void
-  ): Promise<any> & any;
-  addListener(
-    eventName: 'nfcError',
-    listenerFunc: (error: NFCError) => void
-  ): Promise<any> & any;
+  addListener(eventName: 'nfcTag', listenerFunc: (data: NDEFMessages) => void): Promise<any> & any;
+  addListener(eventName: 'nfcUID', listenerFunc: (data: NFCUIDData) => void): Promise<any> & any;
+  addListener(eventName: 'nfcWriteSuccess', listenerFunc: () => void): Promise<any> & any;
+  addListener(eventName: 'nfcError', listenerFunc: (error: NFCError) => void): Promise<any> & any;
   addListener(eventName: string, listenerFunc: (data: any) => void): Promise<any> & any {
     return super.addListener(eventName, listenerFunc);
   }
@@ -68,8 +74,8 @@ export class NFCWeb extends WebPlugin implements NFCPlugin {
     return {
       records: (message.records || []).map((rec: any) => ({
         type: rec.recordType,
-        payload: rec.data ? rec.data : (rec.data === undefined && rec.text ? rec.text : '')
-      }))
+        payload: rec.data ? rec.data : rec.data === undefined && rec.text ? rec.text : '',
+      })),
     };
   }
 

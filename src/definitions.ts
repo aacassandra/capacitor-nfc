@@ -7,19 +7,37 @@ export interface NFCPlugin {
   startScan(): Promise<void>;
 
   /**
+   * Starts scanning for NFC tags to read their UID (unique identifier).
+   * This is useful for card identification without requiring NDEF data.
+   */
+  startUIDScan(): Promise<void>;
+
+  /**
+   * Stops the current NFC scanning session.
+   */
+  stopScan(): Promise<void>;
+
+  /**
    * Writes an NDEF message to an NFC tag.
    * @param options The NDEF message to write.
    */
   writeNDEF(options: NDEFWriteOptions): Promise<void>;
 
   /**
-   * Adds a listener for NFC tag detection events.
-   * @param eventName The name of the event ('nfcTag').
-   * @param listenerFunc The function to call when an NFC tag is detected.
+   * Adds a listener for NFC tag detection events (NDEF format).
    */
   addListener(
     eventName: 'nfcTag',
     listenerFunc: (data: NDEFMessages) => void,
+  ): Promise<PluginListenerHandle> & PluginListenerHandle;
+
+  /**
+   * Adds a listener for NFC UID detection events.
+   * This event is triggered when a card UID is detected during UID scanning.
+   */
+  addListener(
+    eventName: 'nfcUID',
+    listenerFunc: (data: NFCUIDData) => void,
   ): Promise<PluginListenerHandle> & PluginListenerHandle;
 
   /**
@@ -46,7 +64,7 @@ export interface NFCPlugin {
    * Removes all listeners for the specified event.
    * @param eventName The name of the event.
    */
-  removeAllListeners(eventName: 'nfcTag' | 'nfcError'): Promise<void>;
+  removeAllListeners(eventName: 'nfcTag' | 'nfcUID' | 'nfcError'): Promise<void>;
 
   /**
    * Checks if NFC is supported on the current device/platform.
@@ -84,4 +102,36 @@ export interface NFCError {
 
 export interface NDEFWriteOptions {
   records: NDEFRecord[];
+}
+
+export interface NFCUIDData {
+  /**
+   * The unique identifier of the NFC card in hexadecimal format.
+   */
+  uid: string;
+
+  /**
+   * The UID formatted with spaces (e.g., "04 A1 23 45").
+   */
+  uidFormatted: string;
+
+  /**
+   * The length of the UID in bytes.
+   */
+  uidLength: number;
+
+  /**
+   * The detected card type based on UID length.
+   */
+  cardType: string;
+
+  /**
+   * Timestamp when the card was detected.
+   */
+  timestamp: string;
+
+  /**
+   * Additional technical information about the card.
+   */
+  techList?: string[];
 }

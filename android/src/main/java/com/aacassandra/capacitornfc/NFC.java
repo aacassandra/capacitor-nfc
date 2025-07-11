@@ -38,6 +38,7 @@ public class NFC {
     private PendingIntent pendingIntent;
     private String[][] techList;
     private boolean isReading = false;
+    private boolean isUIDReading = false;
     private boolean isWriting = false;
     private NdefMessage messageToWrite;
     private NFCCallback nfcCallback;
@@ -47,6 +48,7 @@ public class NFC {
 
     public interface NFCCallback {
         void onNdefDiscovered(JSObject data);
+        void onUIDDiscovered(JSObject data);
         void onError(String error);
         void onWriteSuccess();
     }
@@ -107,10 +109,37 @@ public class NFC {
 
         // Reset status to start clean reading
         this.isReading = true;
+        this.isUIDReading = false;
         this.isWriting = false;
         
         // Log for debug purposes
         Log.d(TAG, "Starting NFC reading mode");
+        
+        this.enableForegroundDispatch();
+    }
+
+    public void startUIDReading() {
+        if (!isAvailable()) {
+            if (nfcCallback != null) {
+                nfcCallback.onError("NFC is not available on this device");
+            }
+            return;
+        }
+
+        if (!isEnabled()) {
+            if (nfcCallback != null) {
+                nfcCallback.onError("NFC is not enabled");
+            }
+            return;
+        }
+
+        // Reset status to start clean UID reading
+        this.isUIDReading = true;
+        this.isReading = false;
+        this.isWriting = false;
+        
+        // Log for debug purposes
+        Log.d(TAG, "Starting NFC UID reading mode");
         
         this.enableForegroundDispatch();
     }
@@ -156,6 +185,7 @@ public class NFC {
 
     public void stopReading() {
         this.isReading = false;
+        this.isUIDReading = false;
         this.disableForegroundDispatch();
     }
 
@@ -201,6 +231,9 @@ public class NFC {
             
             if (this.isWriting && this.messageToWrite != null) {
                 writeNdefMessage(tag, this.messageToWrite);
+            } else if (this.isUIDReading) {
+                // Process UID reading
+                processUIDData(tag);
             } else if (this.isReading) {
                 Parcelable[] rawMessages = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES);
                 if (rawMessages != null) {
@@ -218,6 +251,15 @@ public class NFC {
                     }
                     
                     this.processNdefMessages(messages);
+                }
+            } else if (this.isUIDReading) {
+                // Handle UID reading
+                String uid = Arrays.toString(tag.getId());
+                JSObject uidData = new JSObject();
+                uidData.put("uid", uid);
+                
+                if (nfcCallback != null) {
+                    nfcCallback.onUIDDiscovered(uidData);
                 }
             }
         }
@@ -277,6 +319,67 @@ public class NFC {
             nfcCallback.onNdefDiscovered(result);
         } catch (Exception e) {
             nfcCallback.onError("Error processing NDEF message: " + e.getMessage());
+        }
+    }
+
+    private void processUIDData(Tag tag) {
+        if (nfcCallback == null) return;
+
+        try {
+            // Get UID from tag
+            byte[] uid = tag.getId();
+            if (uid == null || uid.length == 0) {
+                nfcCallback.onError("Tag UID tidak dapat dibaca");
+                return;
+            }
+
+            // Convert UID to hex string
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : uid) {
+                String hex = Integer.toHexString(0xFF & b);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            String uidHex = hexString.toString();
+            
+            // Format UID with spaces for readability
+            StringBuilder formattedUID = new StringBuilder();
+            for (int i = 0; i < uidHex.length(); i += 2) {
+                if (i > 0) formattedUID.append(" ");
+                formattedUID.append(uidHex.substring(i, Math.min(i + 2, uidHex.length())));
+            }
+
+            // Determine card type based on UID length (similar to desktop version)
+            String cardType = "Tidak diketahui";
+            int uidLengthBytes = uid.length;
+            if (uidLengthBytes == 4) {
+                cardType = "Kemungkinan MIFARE Classic 1K/4K, atau kartu 4-byte UID lainnya";
+            } else if (uidLengthBytes == 7) {
+                cardType = "Kemungkinan MIFARE Ultralight, NTAG, atau kartu 7-byte UID lainnya";
+            }
+
+            // Get tech list
+            String[] techList = tag.getTechList();
+            JSArray techArray = new JSArray();
+            for (String tech : techList) {
+                techArray.put(tech);
+            }
+
+            // Create result object
+            JSObject result = new JSObject();
+            result.put("uid", uidHex);
+            result.put("uidFormatted", formattedUID.toString().toUpperCase());
+            result.put("uidLength", uidLengthBytes);
+            result.put("cardType", cardType);
+            result.put("timestamp", new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(new java.util.Date()));
+            result.put("techList", techArray);
+
+            Log.d(TAG, "UID detected: " + uidHex + " (" + uidLengthBytes + " bytes)");
+            nfcCallback.onUIDDiscovered(result);
+        } catch (Exception e) {
+            nfcCallback.onError("Error processing UID data: " + e.getMessage());
         }
     }
 

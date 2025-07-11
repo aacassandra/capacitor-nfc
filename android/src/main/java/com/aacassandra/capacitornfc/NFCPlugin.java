@@ -28,6 +28,11 @@ public class NFCPlugin extends Plugin {
             }
 
             @Override
+            public void onUIDDiscovered(JSObject data) {
+                notifyListeners("nfcUID", data);
+            }
+
+            @Override
             public void onError(String error) {
                 JSObject errorObj = new JSObject();
                 errorObj.put("error", error);
@@ -54,6 +59,29 @@ public class NFCPlugin extends Plugin {
         }
 
         implementation.startReading();
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void startUIDScan(PluginCall call) {
+        if (!implementation.isAvailable()) {
+            call.reject("NFC is not available on this device");
+            return;
+        }
+
+        if (!implementation.isEnabled()) {
+            call.reject("NFC is not enabled");
+            return;
+        }
+
+        implementation.startUIDReading();
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void stopScan(PluginCall call) {
+        implementation.stopReading();
+        implementation.stopWriting();
         call.resolve();
     }
 
