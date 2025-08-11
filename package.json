@@ -1,6 +1,6 @@
 {
   "name": "@aacassandra/capacitor-nfc",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "A Capacitor plugin for reading and writing NFC tags on iOS and Android.",
   "main": "dist/plugin.cjs.js",
   "module": "dist/esm/index.js",
